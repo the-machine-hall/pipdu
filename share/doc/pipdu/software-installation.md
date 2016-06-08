@@ -74,7 +74,7 @@ _piPduOutlets=(
 
 The PiPDU configuration file is sourced by the PiPDU library and hence uses the bash shell syntax.
 
-## Configure access to the PiPDUShell via SSH and serial console ##
+## Configure access to the PiPDU shell via SSH and serial console ##
 
 1. Change the shell of the pipdu user to `/usr/bin/pipdush`, either via modifying `/etc/passwd` directly or by using `chsh`. This already allows acces via SSH by providing username and password of the pipdu user. You can also make use of public SSH keys in addition.
 
