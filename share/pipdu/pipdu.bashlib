@@ -38,7 +38,7 @@ COPYRIGHT
 
 readonly __GLOBAL__numberOfOutlets=${#_piPduOutlets[@]}
 
-readonly __GLOBAL__version="0.1.0"
+readonly __GLOBAL__piPduVersion="0.1.1"
 
 # following "/usr/include/sysexits.h"
 
@@ -89,7 +89,7 @@ piPdu/on()
 		_systemCode=$( echo "${_piPduOutlets[$_index]}" | cut -d ';' -f 1 )
 		_unitCode=$( echo "${_piPduOutlets[$_index]}" | cut -d ';' -f 2 )
 
-		"$__GLOBAL__piPduSendCommand" -u -b "$_systemCode" "$_unitCode" 1 &>/dev/null
+		"$_piPduSendCommand" -u -b "$_systemCode" "$_unitCode" 1 &>/dev/null
 		return
 	else
 
@@ -113,7 +113,7 @@ piPdu/off()
 		_systemCode=$( echo "${_piPduOutlets[$_index]}" | cut -d ';' -f 1 )
 		_unitCode=$( echo "${_piPduOutlets[$_index]}" | cut -d ';' -f 2 )
 
-		"$__GLOBAL__piPduSendCommand" -u -b "$_systemCode" "$_unitCode" 0 &>/dev/null
+		"$_piPduSendCommand" -u -b "$_systemCode" "$_unitCode" 0 &>/dev/null
 		return
 	else
 		return 1
