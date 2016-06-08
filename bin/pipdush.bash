@@ -23,91 +23,43 @@ The program is distributed under the terms of the GNU General Public License
 
 COPYRIGHT
 
-. /etc/pipdush.conf
-
 ########################################################################
-# VARIABLES
+# DEFINES
 ########################################################################
 
-__GLOBAL__numberOfOutlets=${#_piPduOutlets[@]}
-__GLOBAL__piPduSendCommand="/usr/bin/rf433send"
+readonly __GLOBAL__version="0.2.0"
+
+# following "/usr/include/sysexits.h"
+
+# EX_OK
+readonly __GLOBAL__EX_OK=0
+
+# EX_SOFTWARE
+# internal software error not related to OS
+readonly __GLOBAL__EX_SOFTWARE=70
+
+# own exit code(s)
+readonly __GLOBAL__EX_TIMEOUT=2
+
+
+########################################################################
+# EXTERNAL FUNCTIONALITY
+########################################################################
+
+# load common PiPDU functionality
+if [[ -e "/usr/share/pipdu/pipdu.bashlib" ]]; then
+
+	. "/usr/share/pipdu/pipdu.bashlib" || exit $__GLOBAL__EX_SOFTWARE
+else
+	. "$( dirname $BASH_SOURCE )/../share/pipdu/pipdu.bashlib" || exit $__GLOBAL__EX_SOFTWARE
+fi
 
 
 ########################################################################
 # FUNCTIONS
 ########################################################################
 
-piPdu/validOutletGiven()
-{
-	local _outlet="$1"
-
-	# check if value of _outlet is an integer number. Please notice that we use single brackets!
-	if ! [ "$_outlet" -eq "$_outlet" ] 2>/dev/null; then
-
-		echo "No valid outlet given. Valid outlet values are integer values from 1 to $__GLOBAL__numberOfOutlets."
-		return 1
-	fi
-
-	if [[ $_outlet -gt $__GLOBAL__numberOfOutlets || \
-	      $_outlet -lt 1 || \
-	      $_outlet == "" ]] ; then
-
-		echo "No valid outlet given. Valid outlet values are integer values from 1 to $__GLOBAL__numberOfOutlets."
-		return 1
-	else
-		return 0
-	fi
-}
-
-
-piPdu/on()
-{
-	local _outlet="$1"
-	local _systemCode=""
-	local _unitCode=""
-	local _index=""
-
-	if piPdu/validOutletGiven "$_outlet"; then
-
-		echo "Powering on outlet \"$_outlet\"."
-
-		_index=$(( $_outlet - 1 ))
-		_systemCode=$( echo "${_piPduOutlets[$_index]}" | cut -d ';' -f 1 )
-		_unitCode=$( echo "${_piPduOutlets[$_index]}" | cut -d ';' -f 2 )
-
-		"$__GLOBAL__piPduSendCommand" -u -b "$_systemCode" "$_unitCode" 1 &>/dev/null
-		return
-	else
-
-		return 1
-	fi
-}
-
-
-piPdu/off()
-{
-	local _outlet="$1"
-	local _systemCode=""
-	local _unitCode=""
-	local _index=""
-
-	if piPdu/validOutletGiven "$_outlet"; then
-	
-		echo "Powering off outlet \"$_outlet\"."
-
-		_index=$(( $_outlet - 1 ))
-		_systemCode=$( echo "${_piPduOutlets[$_index]}" | cut -d ';' -f 1 )
-		_unitCode=$( echo "${_piPduOutlets[$_index]}" | cut -d ';' -f 2 )
-
-		"$__GLOBAL__piPduSendCommand" -u -b "$_systemCode" "$_unitCode" 0 &>/dev/null
-		return
-	else
-		return 1
-	fi
-}
-
-
-piPdu/help()
+piPduSh/help()
 {
 	echo "Valid commands are:"
 	echo "* on <OUTLET>"
@@ -124,27 +76,17 @@ piPdu/help()
 
 trap ':' SIGINT
 
-if [[ ! -e "$__GLOBAL__piPduSendCommand" ]]; then
-
-	echo "The \`$__GLOBAL__piPduSendCommand\` command couldn't be found. Please check the requirements in INSTALL.md and provide the \`$__GLOBAL__piPduSendCommand\` command before retrying. Exiting now." 1>&2
-	exit 1
-fi
-
-# Make GPIO pin 17 accessible in user mode by the calling user
-gpio export 17 out
-
 echo "Welcome to the PiPDU $_piPduName"
-piPdu/help
+piPduSh/help
 
 while [[ 1 ]]; do
 
-	#echo -n "$_piPduShellPrompt"
 	read -e -p "${_piPduShellPrompt}" -t $_piPduShellTimeout _command _outlet _ignore
 
 	if [[ $? -ne 0 ]]; then
 
 		echo -e "\nTimeout reached. Exiting."
-		exit 2
+		exit $__GLOBAL__EX_TIMEOUT
 	fi
 
 	case "$_command" in
@@ -158,12 +100,12 @@ while [[ 1 ]]; do
 		;;
 
 	help)
-		piPdu/help
+		piPduSh/help
 		;;
 
 	quit)
 		echo "Good bye."
-		exit
+		exit $__GLOBAL__EX_OK
 		;;
 	esac
 done

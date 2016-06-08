@@ -14,8 +14,8 @@ The PiPDU is a project that offers the functionality of a remote controllable PD
 
 Have a look at the following documentation to start:
 
-* [Software installation](share/doc/software-installation.md)
-* [Hardware installation](share/doc/hardware-installation.md)
+* [Software installation](share/doc/pipdu/software-installation.md)
+* [Hardware installation](share/doc/pipdu/hardware-installation.md)
 
 ## What's a PDU anyhow? ##
 
