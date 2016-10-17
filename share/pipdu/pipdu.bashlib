@@ -33,12 +33,18 @@ COPYRIGHT
 . /etc/pipdu.conf
 
 ########################################################################
-# Defines
+# DEFINES
 ########################################################################
 
 readonly __GLOBAL__numberOfOutlets=${#_piPduOutlets[@]}
 
-readonly __GLOBAL__piPduVersion="0.1.1"
+readonly __GLOBAL__piPduVersion="0.2.0"
+
+readonly __GLOBAL__on=1
+readonly __GLOBAL__off=0
+
+readonly __GLOBAL__tmpDir="$HOME/.pipdu"
+readonly __GLOBAL__lockFile="${__GLOBAL__tmpDir}/pipdu.lock"
 
 # following "/usr/include/sysexits.h"
 
@@ -50,6 +56,94 @@ readonly __GLOBAL__EX_CONFIG=78
 ########################################################################
 # FUNCTIONS
 ########################################################################
+
+# Public: Lock by creating a lock file as symlink.
+#
+# $1 (_lockFile) - The name and path of the lock file (string).
+#
+# Returns 0 on success, 1 otherwise.
+ipc/lockWithSymlink()
+{
+	local _lockFile="$1"
+	local _lockTimeOut=5 # how long to try to get the lock.
+
+	local _dateStart=$( date +%s )
+	local _dateNow=""
+
+	# mv (rename) should be atomic on NFS, rm might not be atomic on NFS.
+	trap 'mv "$_lockFile" "${_lockFile}.unlocked" &>/dev/null && rm "${_lockFile}.unlocked" &>/dev/null' SIGINT
+
+	# remove locks older than 10 seconds
+	if [[ -e "$_lockFile" ]]; then
+
+		if [[ $( stat -c %Z "$_lockFile" ) -lt $(( $_dateStart - 10 )) ]]; then
+
+			mv "$_lockFile" "${_lockFile}.unlocked" &>/dev/null && rm "${_lockFile}.unlocked" &>/dev/null
+		fi
+	fi
+
+	while [[ 1 ]]; do
+
+		if ln -s "pipdu-lock" "$_lockFile" &>/dev/null; then
+
+			return 0
+		else
+			_dateNow=$( date +%s )
+
+	                if [[ $_dateNow -ge $(( $_dateStart + $_lockTimeOut )) ]]; then
+
+				return 1
+			else
+				sleep 0.5
+				continue
+			fi
+		fi
+	done
+}
+
+
+# Public: Unlock by removing a lockfile (symlink).
+#
+# $1 (_lockFile) - The name and path of the lock file (string).
+#
+# Returns 0 on success, 1 otherwise.
+ipc/unlockWithSymlink()
+{
+        local _lockFile="$1"
+
+	# mv (rename) should be atomic on NFS, rm might not be atomic on NFS.
+        trap 'mv "$_lockFile" "${_lockFile}.unlocked" &>/dev/null && rm "${_lockFile}.unlocked" &>/dev/null' SIGINT
+
+        if mv "$_lockFile" "${_lockFile}.unlocked" &>/dev/null && rm -f "${_lockFile}.unlocked" &>/dev/null; then
+
+                return 0
+        else
+                return 1
+        fi
+}
+
+
+# Public: Shorthand for locking.
+#
+# For parameters and return values see the respective function.
+ipc/lock()
+{
+        ipc/lockWithSymlink "$@"
+
+        return
+}
+
+
+# Public: Shorthand for unlocking.
+#
+# For parameters and return values see the respective function.
+ipc/unlock()
+{
+        ipc/unlockWithSymlink "$@"
+
+        return
+}
+
 
 piPdu/validOutletGiven()
 {
@@ -74,6 +168,28 @@ piPdu/validOutletGiven()
 }
 
 
+piPdu/send()
+{
+	local _systemCode="$1"
+	local _unitCode="$2"
+	local _command="$3"
+
+	local _retVal=1
+
+	if ipc/lock "$__GLOBAL__lockFile"; then
+
+		"$_piPduSendCommand" -u -b "$_systemCode" "$_unitCode" "$_command" &>/dev/null
+		_retVal=$?
+
+		ipc/unlock "$__GLOBAL__lockFile"
+		return $_retVal
+	else
+		echo "Couldn't get lock for sending. Please try again later." 1>&2
+		return 2
+	fi
+}
+
+
 piPdu/on()
 {
 	local _outlet="$1"
@@ -89,7 +205,7 @@ piPdu/on()
 		_systemCode=$( echo "${_piPduOutlets[$_index]}" | cut -d ';' -f 1 )
 		_unitCode=$( echo "${_piPduOutlets[$_index]}" | cut -d ';' -f 2 )
 
-		"$_piPduSendCommand" -u -b "$_systemCode" "$_unitCode" 1 &>/dev/null
+		piPdu/send "$_systemCode" "$_unitCode" "$__GLOBAL__on"
 		return
 	else
 
@@ -113,7 +229,7 @@ piPdu/off()
 		_systemCode=$( echo "${_piPduOutlets[$_index]}" | cut -d ';' -f 1 )
 		_unitCode=$( echo "${_piPduOutlets[$_index]}" | cut -d ';' -f 2 )
 
-		"$_piPduSendCommand" -u -b "$_systemCode" "$_unitCode" 0 &>/dev/null
+		piPdu/send "$_systemCode" "$_unitCode" "$__GLOBAL__off"
 		return
 	else
 		return 1
@@ -130,7 +246,13 @@ gpio export $_piPduGpioPinNo out || exit $__GLOBAL__EX_CONFIG
 # Make sure the send command is available
 if [[ ! -e "$_piPduSendCommand" ]]; then
 
-	echo "The \`$_piPduSendCommand\` command couldn't be found. Please check the requirements in "/usr/share/doc/pipdu/software-installation.md" and provide the \`$__GLOBAL__piPduSendCommand\` command before retrying. Exiting now." 1>&2
+	echo "The \`$_piPduSendCommand\` command couldn't be found. Please check the requirements in "/usr/share/doc/pipdu/software-installation.md" and provide the \`$_piPduSendCommand\` command before retrying. Exiting now." 1>&2
 	exit $__GLOBAL__EX_CONFIG
+fi
+
+if [[ ! -e "$__GLOBAL__tmpDir" ]]; then
+
+        umask 0077
+        mkdir "$__GLOBAL__tmpDir"
 fi
 
